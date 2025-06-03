@@ -1,0 +1,426 @@
+{% extends 'chat/base.html' %}
+{% load static %}
+{% block content %}
+{% load humanize %}
+
+<h2>Group Chat</h2>
+<h5 class="mb-2">📌 Pinned</h5>
+<div id="pinned-zone"></div>
+
+<div id="chat-box" class="border rounded p-3 mb-3 text-black" style="height: 400px; overflow-y: scroll">
+    {# First show pinned messages in pinned-zone #} 
+{% for msg in messages %} 
+    {% if msg.pinned %}
+    <div class="mb-2 border p-2 rounded" data-msg-id="{{ msg.id }}" id="msg-{{ msg.id }}">
+        <script>
+            // Move this pinned message into the pinned zone on load
+            document.addEventListener("DOMContentLoaded", () => {
+                const msgDiv = document.getElementById("msg-{{ msg.id }}");
+                const pinnedZone = document.getElementById("pinned-zone");
+                if (msgDiv && pinnedZone) pinnedZone.appendChild(msgDiv);
+            });
+        </script>
+
+        {# ... same message content as before ... #}
+        <div
+            class="d-flex align-items-center mb-1 message {% if msg.reported and user.is_superuser %}bg-danger text-white{% endif %}">
+            {% if msg.user.profile_picture %}
+            <img src="{{ msg.user.profile_picture.url }}" class="rounded-circle me-2" width="40" height="40" alt="" />
+            {% else %}
+            <img src="{% static 'profile_pics/wallpaper.jpg' %}" class="rounded-circle me-2" width="40" height="40"
+                alt="" />
+            {% endif %}
+            <strong>{{ msg.user.username }}</strong>
+            {% if msg.user.badge and not msg.user.is_superuser %}
+            <img src="{{ msg.user.badge.url }}" class="ms-2" style="height: 20px" alt="Badge" />
+            {% endif %}
+            <span class="text-muted ms-auto">{{ msg.timestamp|timesince }} ago</span>
+        </div>
+        <div>{{ msg.content }}</div>
+
+        {% if not request.user.is_superuser and request.user != msg.user and not msg.user.is_superuser %}
+        <a href="{% url 'report' msg.id %}" class="btn btn-sm btn-outline-danger mt-1">Report</a>
+        {% endif %} 
+        {% if request.user.is_superuser %}
+        <button onclick="deleteMessage({{ msg.id }})" class="btn btn-sm btn-outline-danger mt-1 ms-2">
+            Delete
+        </button>
+        <button onclick="pinMessage({{ msg.id }})" class="btn btn-sm btn-outline-primary mt-1 ms-2 pin-btn">
+            Un-pin
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+{% endfor %} {# Now show unpinned messages in chat-box #} 
+    {% for msg in messages %} 
+        {% if not msg.pinned %}
+        <div class="mb-2 border p-2 rounded" data-msg-id="{{ msg.id }}" id="msg-{{ msg.id }}">
+            {# ... same message HTML again ... #}
+                <div class="d-flex align-items-center mb-1">
+                    {% if msg.user.profile_picture %}
+                    <img src="{{ msg.user.profile_picture.url }}" class="rounded-circle me-2" width="40" height="40" alt="" />
+                    {% else %}
+                    <img src="{% static 'profile_pics/wallpaper.jpg' %}" class="rounded-circle me-2" width="40" height="40"
+                        alt="" />
+                    {% endif %}
+                    <strong>{{ msg.user.username }}</strong>
+                    {% if msg.user.badge and not msg.user.is_superuser %}
+                    <img src="{{ msg.user.badge.url }}" class="ms-2" style="height: 20px" alt="Badge" />
+                    {% endif %}
+                    <span class="text-muted ms-auto">{{ msg.timestamp|timesince }} ago</span>
+                </div>
+            <div>{{ msg.content }}</div>
+
+            {% if not request.user.is_superuser and request.user != msg.user and not msg.user.is_superuser %}
+            <button
+            id="report-btn-{{ msg.id }}"
+            onclick="toggleReport({{ msg.id }})"
+            class="btn btn-sm btn-outline-danger mt-1 report-btn"
+            >
+            {% if msg.reported %} Un-report {% else %} Report {% endif %}
+            </button>
+
+
+            {% endif %} 
+            {% if request.user.is_superuser %}
+            <button onclick="deleteMessage({{ msg.id }})" class="btn btn-sm btn-outline-danger mt-1 ms-2">
+                Delete
+            </button>
+            <button onclick="pinMessage({{ msg.id }})" class="btn btn-sm btn-outline-primary mt-1 ms-2 pin-btn">
+                Pin
+            </button>
+            {% endif %}
+        </div>
+        {% endif %} 
+    {% endfor %}
+</div>
+
+
+<form id="chat-form" class="d-flex">
+    <input id="message-input" type="text" class="form-control me-2" placeholder="Type a message..." required />
+    <button class="btn btn-primary" type="submit">Send</button>
+</form>
+
+
+
+
+
+
+
+{% if request.user.is_superuser %}
+<h3 class="mt-5">Reported Messages</h3>
+<ul id="reported-messages" class="list-group">
+  {% for msg in reported_msgs %}
+      <li id="reported-{{ msg.id }}" class="list-group-item d-flex justify-content-between align-items-center">
+          <span>
+              <strong>{{ msg.user.username }}</strong>:
+              {{ msg.content|truncatewords:10 }}
+          </span>
+          <button onclick="deleteMessage({{ msg.id }})" class="btn btn-sm btn-danger">Delete</button>
+      </li>
+  {% empty %}
+      <li id="no-reports" class="list-group-item">Nothing reported yet 🎉</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+
+
+
+
+
+
+
+
+
+
+<script>
+    const username = "{{ user.username|escapejs }}";
+    const profilePicture = "{% if user.profile_picture %}{{ user.profile_picture.url }}{% else %}{% static 'chat/default_profile.png' %}{% endif %}";
+    const badge = "{% if user.badge %}{{ user.badge.url }}{% endif %}";
+    const IS_OWNER = {{ request.user.is_superuser|yesno:"true,false" }};
+
+    const chatBox = document.getElementById("chat-box");
+    const messageInput = document.getElementById("message-input");
+
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    const chatSocket = new WebSocket(`${protocol}://${location.host}/ws/chat/`);
+
+    // ✅ MAKE deleteMessage GLOBAL
+    function deleteMessage(id) {
+        chatSocket.send(JSON.stringify({
+            type: "delete",
+            id: id
+        }));
+    }
+
+
+    function toggleReport(id) {
+        chatSocket.send(JSON.stringify({
+            type: "report",
+            id: id
+        }));
+    }
+
+
+    function pinMessage(id) {
+        const btn = document.querySelector(`#msg-${id} .pin-btn`);
+        const currentlyPinned = btn.textContent.trim().toLowerCase() === "un-pin";
+
+        chatSocket.send(JSON.stringify({
+            type: "pin",
+            id: id,
+            value: !currentlyPinned
+        }));
+    }
+
+
+    function moveToPinnedArea(div, makePinned) {
+        const pinnedZone = document.getElementById("pinned-zone");
+        if (makePinned) {
+            pinnedZone.appendChild(div);
+        } else {
+            chatBox.appendChild(div);
+        }
+    }
+
+
+
+    function timeAgo(date) {
+        const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60,
+            second: 1
+        };
+
+        for (const [unit, value] of Object.entries(intervals)) {
+            const amount = Math.floor(seconds / value);
+            if (amount >= 1) {
+                return `${amount} ${unit}${amount > 1 ? 's' : ''} ago`;
+            }
+        }
+        return 'just now';
+    }
+
+
+
+
+
+
+    function addMessageToChatBox(messageHtml) {
+        const div = document.createElement("div");
+        div.innerHTML = messageHtml;
+        chatBox.appendChild(div); // ✅ adds at the bottom
+        chatBox.scrollTop = chatBox.scrollHeight; // ✅ auto-scroll to latest
+    }
+
+
+
+
+
+
+
+
+
+
+    const deletedMessages = new Set();  // Track already-deleted messages
+
+    chatSocket.onmessage = e => {
+        const data = JSON.parse(e.data);
+
+        if (data.action === "pin") {
+            const msgDiv = chatBox.querySelector(`div[data-msg-id="${data.id}"]`) ||
+                document.getElementById("pinned-zone").querySelector(`div[data-msg-id="${data.id}"]`);
+            if (msgDiv) {
+                moveToPinnedArea(msgDiv, data.value);
+                const btn = msgDiv.querySelector(".pin-btn");
+                if (btn) btn.textContent = data.value ? "Un-pin" : "Pin";
+
+                // ✅ Hide/show Report button based on pin status
+                const reportBtn = msgDiv.querySelector(".report-btn");
+                if (reportBtn) {
+                    if (data.value) {
+                        reportBtn.style.display = "none"; // Hide when pinned
+                    } else {
+                        reportBtn.style.display = ""; // Show when unpinned
+                    }
+                }
+            }
+            return;
+        }
+
+
+
+
+
+
+
+        if (data.action === "delete") {
+            const msgId = data.id;
+            if (deletedMessages.has(msgId)) return;
+            deletedMessages.add(msgId);
+
+            const msgElement = document.getElementById(`msg-${msgId}`);
+            if (msgElement) msgElement.remove();
+           
+            
+            const reportedItem = document.getElementById(`reported-${msgId}`);
+            if (reportedItem) {
+                reportedItem.remove();
+
+                // ✅ If no more reported messages, show the empty message
+                if (!document.querySelector("#reported-messages li[id^='reported-']")) {
+                    const ul = document.getElementById("reported-messages");
+                    const li = document.createElement("li");
+                    li.id = "no-reports";
+                    li.className = "list-group-item";
+                    li.innerText = "Nothing reported yet 🎉";
+                    ul.appendChild(li);
+                }
+            }
+
+            return;
+        }
+
+
+
+
+
+
+        if (data.action === "report") {
+        const msgId = data.id;
+        const isReported = data.reported;
+
+        // Update report button UI
+        const reportBtn = document.querySelector(`#report-btn-${msgId}`);
+        if (reportBtn) {
+            if (isReported) {
+                reportBtn.classList.add("btn-outline-danger");
+                reportBtn.innerText = "Un-report";
+            } else {
+                reportBtn.classList.remove("text-danger");
+                reportBtn.innerText = "Report";
+            }
+        }
+
+        // ✅ For superuser, dynamically update reported message list
+        if (IS_OWNER) {
+            const reportedList = document.getElementById("reported-messages");
+
+            // Remove "Nothing reported yet 🎉" placeholder
+            const placeholder = document.getElementById("no-reports");
+            if (placeholder) placeholder.remove();
+
+            if (isReported) {
+                // Only add if not already added
+                if (!document.getElementById(`reported-${msgId}`)) {
+                    const msgContent = document.querySelector(`#msg-${msgId} div:nth-child(2)`).textContent;
+                    const msgUsername = document.querySelector(`#msg-${msgId} strong`).textContent;
+
+                    const li = document.createElement("li");
+                    li.id = `reported-${msgId}`;
+                    li.className = "list-group-item d-flex justify-content-between align-items-center";
+                    li.innerHTML = `
+                        <span><strong>${msgUsername}</strong>: ${msgContent.slice(0, 100)}</span>
+                        <button onclick="deleteMessage(${msgId})" class="btn btn-sm btn-danger">Delete</button>
+                    `;
+                    reportedList.appendChild(li);
+                }
+            } else {
+                const existing = document.getElementById(`reported-${msgId}`);
+                if (existing) {
+                    existing.remove();
+
+                    // If none left, show placeholder again
+                    if (!document.querySelector("#reported-messages li[id^='reported-']")) {
+                        const li = document.createElement("li");
+                        li.id = "no-reports";
+                        li.className = "list-group-item";
+                        li.innerText = "Nothing reported yet 🎉";
+                        reportedList.appendChild(li);
+                    }
+                }
+            }
+        }
+
+        return;
+    }
+
+
+
+
+
+
+        if (!data.username || data.username === "undefined") return;
+
+        const div = document.createElement("div");
+        div.className = "mb-2 border p-2 rounded";
+        div.setAttribute("data-msg-id", data.id);
+        div.setAttribute("id", `msg-${data.id}`);
+
+
+        const pinned = data.pinned || false;
+
+
+        div.innerHTML = `
+          <div class="d-flex align-items-center mb-1">
+              <img src="${data.profile_pic}" class="rounded-circle me-2" width="40" height="40">
+              <strong>${data.username}</strong>
+              ${data.badge ? `<img src="${data.badge}" class="ms-2" style="height:20px;">` : ""}
+              <span class="text-muted ms-auto">${timeAgo(data.timestamp)}</span>
+
+
+          </div>
+          <div>${data.message}</div>
+          ${(username !== data.username && !IS_OWNER) ? `
+          <button onclick="toggleReport(${data.id})" class="btn btn-sm btn-outline-danger mt-1 report-btn">
+              ${data.reported ? "Un-report" : "Report"}
+          </button>` : ""}
+
+
+          ${IS_OWNER ? `
+              <button onclick="deleteMessage(${data.id})" class="btn btn-sm btn-outline-danger mt-1 ms-2">Delete</button>
+              <button onclick="pinMessage(${data.id}, false)" class="btn btn-sm btn-outline-primary mt-1 ms-2 pin-btn">Pin</button>
+          ` : ""}
+      `;
+        document.getElementById("chat-box").appendChild(div);
+
+        if (pinned) {
+            moveToPinnedArea(div, true);
+        } else {
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+
+
+
+    };
+
+    document.getElementById("chat-form").onsubmit = function (e) {
+        e.preventDefault();
+        if (chatSocket.readyState === WebSocket.OPEN) {
+            const msg = messageInput.value;
+            chatSocket.send(JSON.stringify({
+                'username': username,
+                'message': msg,
+                'profile_picture': profilePicture,
+                'badge': badge
+            }));
+            messageInput.value = '';
+        } else {
+            alert("WebSocket is not connected.");
+        }
+    };
+
+    window.onload = function () {
+        const chatBox = document.getElementById("chat-box");
+        chatBox.scrollTop = chatBox.scrollHeight;
+    };
+</script>
+{% endblock %}

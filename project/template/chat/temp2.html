@@ -1,0 +1,487 @@
+{% extends 'chat/base.html' %}
+{% load static %}
+{% block content %}
+{% load humanize %}
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>makBig - Admin Chat Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        makblue: '#2563EB',
+                        makgreen: '#10B981',
+                        makred: '#EF4444',
+                        makyellow: '#F59E0B',
+                        makgray: '#F3F4F6',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="flex h-screen overflow-hidden">
+        
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <header class="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+                <div>
+                    <h1 class="text-xl font-bold text-makblue">makBig Admin Panel</h1>
+                    <p class="text-xs text-gray-500">Chat control section</p>
+                </div>
+                <h2 class="text-lg font-semibold text-gray-800">Group Chat</h2>
+                <div class="flex space-x-2">
+                    <button class="p-2 text-gray-500 hover:text-makblue hover:bg-gray-100 rounded-full">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="p-2 text-gray-500 hover:text-makblue hover:bg-gray-100 rounded-full">
+                        <i class="fas fa-filter"></i>
+                    </button>
+                </div>
+            </header>
+            
+            <main class="flex-1 overflow-y-auto p-4 bg-makgray" id="chat-box">
+            {% for msg in messages %} 
+                {% if msg.pinned %}
+                <div class="bg-white rounded-lg shadow-md mb-6">
+                    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                        <h3 class="text-md font-semibold text-gray-800" id="pinned-zone"><i class="fas fa-thumbtack mr-2 text-makblue"></i>Pinned Messages</h3>
+                        
+                    </div>
+                    <div class="p-4 space-y-3" data-msg-id="{{ msg.id }}" id="msg-{{ msg.id }}">
+                     <script>
+                        // Move this pinned message into the pinned zone on load
+                        document.addEventListener("DOMContentLoaded", () => {
+                            const msgDiv = document.getElementById("msg-{{ msg.id }}");
+                            const pinnedZone = document.getElementById("pinned-zone");
+                            if (msgDiv && pinnedZone) pinnedZone.appendChild(msgDiv);
+                        });
+                    </script>
+                        <div class="flex items-start  {% if msg.reported and user.is_superuser %}bg-danger text-white{% endif %}">
+                        {% if msg.user.profile_picture %}
+                            <img src="{{ msg.user.profile_picture.url }}" alt="User" class="w-10 h-10 rounded-full mr-3 mt-3">
+                        {% else %}
+                            <img src="{% static 'profile_pics/wallpaper.jpg' %}" alt="User" class="w-10 h-10 rounded-full mr-3 mt-3">
+                        {% endif %}
+                            <div class="flex-1">
+                                <div class="flex items-center"> <span class="font-medium text-sm mr-2">{{ msg.user.username }}</span>
+                                {% if msg.user.badge and not msg.user.is_superuser %}
+                                    <img src="{{ msg.user.badge.url }}" alt="User" class="w-8 h-8 rounded-full mr-2">{% endif %} <span class="text-xs text-gray-500">{{ msg.timestamp|timesince }} ago</span>
+                                </div>
+                                <p class="mt-1 text-sm text-gray-700">{{ msg.content }}</p>
+                            </div>
+                            {% if not request.user.is_superuser and request.user != msg.user and not msg.user.is_superuser %}
+                            <a href="{% url 'report' msg.id %}"><button class="px-3 py-1 bg-makgreen text-white text-sm rounded hover:bg-green-600">
+                                <i class="fas fa-check mr-1"></i> report
+                            </button></a>
+                            {% endif %} 
+                            {% if request.user.is_superuser %}
+                            <button onclick="pinMessage({{ msg.id }})" class="px-3 py-1 bg-makgreen text-white text-sm rounded hover:bg-green-600">
+                                <i class="fas fa-check mr-1"></i> Pin-messages
+                            </button>
+                            <button onclick="deleteMessage({{ msg.id }})" class="ml-4 p-1 text-gray-500 hover:text-makred rounded hover:bg-gray-100">
+                                <i class="fas fa-times"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+                {# Now show unpinned messages in chat-box #}
+            {% for msg in messages %} 
+                 {% if not msg.pinned %}
+                <div class="space-y-4"  data-msg-id="{{ msg.id }}" id="msg-{{ msg.id }}" >
+                    <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                        <div class="p-4">
+                            <div class="flex items-start mt-4">
+                            {% if msg.user.profile_picture %}
+                                <img src="{{ msg.user.profile_picture.url }}" alt="User" class="w-10 h-10 rounded-full mr-3 mt-3">
+                            {% else %}
+                                <img src="{% static 'profile_pics/wallpaper.jpg' %}" alt="User" class="w-10 h-10 rounded-full mr-3 mt-3">
+                            {% endif %}
+                                <div class="flex-1">
+                                    <div class="flex items-center"> <span class="font-medium mr-2">{{ msg.user.username }}</span>
+                                    {% if msg.user.badge and not msg.user.is_superuser %}
+                                        <img src="{{ msg.user.badge.url }}" alt="User" class="w-8 h-8 rounded-full mr-2"> <span class="text-xs text-gray-500">{{ msg.timestamp|timesince }} ago</span>
+                                    </div>
+                                    <p class="mt-4 text-sm">{{ msg.content }}</p>
+                                    
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 px-4 py-3 flex justify-end space-x-2">
+                        {% if not request.user.is_superuser and request.user != msg.user and not msg.user.is_superuser %}
+                            <button  id="report-btn-{{ msg.id }}"
+                            onclick="toggleReport({{ msg.id }})" class="px-3 py-1 bg-makyellow text-white text-sm rounded hover:bg-yellow-600">
+                                <i class="fas fa-flag mr-1"></i> {% if msg.reported %} Un-report {% else %} Report {% endif %}
+                            </button>
+                        {% endif %} 
+                        {% if request.user.is_superuser %}
+                            <button  onclick="pinMessage({{ msg.id }})" class="px-3 py-1 bg-makgreen text-white text-sm rounded hover:bg-green-600">
+                                <i class="fas fa-check mr-1"></i> Pin
+                            </button>
+                            <button onclick="deleteMessage({{ msg.id }})" class="px-3 py-1 bg-makred text-white text-sm rounded hover:bg-red-600">
+                                <i class="fas fa-trash-alt mr-1"></i> Delete Message
+                            </button>
+                        {% endif %}
+                        </div>
+
+                    </div>
+                </div>
+                {% endif %} 
+            {% endfor %}    
+            </main>
+            <form id="chat-form" class="bg-white border-t border-gray-200 p-4 flex items-center" >
+                <input id="message-input" type="text" placeholder="Type your message here..." class="flex-1 form-control border border-gray-300 rounded-lg py-2 px-4 focus:outline-none focus:ring-2 focus:ring-makblue focus:border-transparent">
+                <button type="submit" class="ml-4 px-6 py-2 bg-makblue text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-makblue focus:ring-opacity-50">
+                    <i class="fas fa-paper-plane mr-2"></i>Send Message
+                </button>
+            </form>
+        </div>
+
+
+
+        {% if request.user.is_superuser %}
+        <aside class="w-80 bg-white border-l border-gray-200 flex flex-col p-4 shadow-lg overflow-y-auto">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4" id="reported-messages">Reported Message Summary</h3>
+             {% for msg in reported_msgs %}
+            <div class="bg-gray-50 rounded-lg p-4 shadow-sm" id="reported-{{ msg.id }}">
+                <div class="flex items-start mb-3">
+                    <img src="{{ msg.user.profile_picture.url }}" alt="Reported User" class="w-12 h-12 rounded-full mr-3">
+                    <div class="flex items-center"> <div class="font-semibold text-gray-800 mr-2">{{ msg.user.username }}</div>
+                        <img src="{{ msg.user.badge.url }}" alt="Reporting User" class="w-8 h-8 rounded-full mr-2"> 
+                        <span class="text-xs text-gray-500">{{ msg.timestamp|timesince }} ago</span>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-700 mb-4">{{ msg.content }}</p>
+            
+                <button  onclick="deleteMessage({{ msg.id }})" class="w-full px-3 py-2 bg-makred text-white text-sm rounded hover:bg-red-600">
+                    <i class="fas fa-trash-alt mr-1"></i> Delete Message
+                </button>
+            </div>
+            {% empty %}
+            <div class="flex items-center"> <span class="font-medium text-sm mr-2">No reported messages yet..!</span>
+            {% endfor %}
+        </aside>
+        {% endif %}
+
+
+
+
+
+
+    <script>
+    const username = "{{ user.username|escapejs }}";
+    const profilePicture = "{% if user.profile_picture %}{{ user.profile_picture.url }}{% else %}{% static 'chat/default_profile.png' %}{% endif %}";
+    const badge = "{% if user.badge %}{{ user.badge.url }}{% endif %}";
+    const IS_OWNER = {{ request.user.is_superuser|yesno:"true,false" }};
+
+    const chatBox = document.getElementById("chat-box");
+    const messageInput = document.getElementById("message-input");
+
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    const chatSocket = new WebSocket(`${protocol}://${location.host}/ws/chat/`);
+
+    // ✅ MAKE deleteMessage GLOBAL
+    function deleteMessage(id) {
+        chatSocket.send(JSON.stringify({
+            type: "delete",
+            id: id
+        }));
+    }
+
+
+    function toggleReport(id) {
+        chatSocket.send(JSON.stringify({
+            type: "report",
+            id: id
+        }));
+    }
+
+
+    function pinMessage(id) {
+        const btn = document.querySelector(`#msg-${id} .pin-btn`);
+        const currentlyPinned = btn.textContent.trim().toLowerCase() === "un-pin";
+
+        chatSocket.send(JSON.stringify({
+            type: "pin",
+            id: id,
+            value: !currentlyPinned
+        }));
+    }
+
+
+    function moveToPinnedArea(div, makePinned) {
+        const pinnedZone = document.getElementById("pinned-zone");
+        if (makePinned) {
+            pinnedZone.appendChild(div);
+        } else {
+            chatBox.appendChild(div);
+        }
+    }
+
+
+
+    function timeAgo(date) {
+        const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60,
+            second: 1
+        };
+
+        for (const [unit, value] of Object.entries(intervals)) {
+            const amount = Math.floor(seconds / value);
+            if (amount >= 1) {
+                return `${amount} ${unit}${amount > 1 ? 's' : ''} ago`;
+            }
+        }
+        return 'just now';
+    }
+
+
+
+
+
+
+    function addMessageToChatBox(messageHtml) {
+        const div = document.createElement("div");
+        div.innerHTML = messageHtml;
+        chatBox.appendChild(div); // ✅ adds at the bottom
+        chatBox.scrollTop = chatBox.scrollHeight; // ✅ auto-scroll to latest
+    }
+
+
+
+
+
+
+
+
+
+
+    const deletedMessages = new Set();  // Track already-deleted messages
+
+    chatSocket.onmessage = e => {
+        const data = JSON.parse(e.data);
+
+        if (data.action === "pin") {
+            const msgDiv = chatBox.querySelector(`div[data-msg-id="${data.id}"]`) ||
+                document.getElementById("pinned-zone").querySelector(`div[data-msg-id="${data.id}"]`);
+            if (msgDiv) {
+                moveToPinnedArea(msgDiv, data.value);
+                const btn = msgDiv.querySelector(".pin-btn");
+                if (btn) btn.textContent = data.value ? "Un-pin" : "Pin";
+
+                // ✅ Hide/show Report button based on pin status
+                const reportBtn = msgDiv.querySelector(".report-btn");
+                if (reportBtn) {
+                    if (data.value) {
+                        reportBtn.style.display = "none"; // Hide when pinned
+                    } else {
+                        reportBtn.style.display = ""; // Show when unpinned
+                    }
+                }
+            }
+            return;
+        }
+
+
+
+
+
+
+
+        if (data.action === "delete") {
+            const msgId = data.id;
+            if (deletedMessages.has(msgId)) return;
+            deletedMessages.add(msgId);
+
+            const msgElement = document.getElementById(`msg-${msgId}`);
+            if (msgElement) msgElement.remove();
+           
+            
+            const reportedItem = document.getElementById(`reported-${msgId}`);
+            if (reportedItem) {
+                reportedItem.remove();
+
+                // ✅ If no more reported messages, show the empty message
+                if (!document.querySelector("#reported-messages li[id^='reported-']")) {
+                    const ul = document.getElementById("reported-messages");
+                    const li = document.createElement("li");
+                    li.id = "no-reports";
+                    li.className = "list-group-item";
+                    li.innerText = "Nothing reported yet 🎉";
+                    ul.appendChild(li);
+                }
+            }
+
+            return;
+        }
+
+
+
+
+
+
+        if (data.action === "report") {
+        const msgId = data.id;
+        const isReported = data.reported;
+
+        // Update report button UI
+        const reportBtn = document.querySelector(`#report-btn-${msgId}`);
+        if (reportBtn) {
+            if (isReported) {
+                reportBtn.classList.add("btn-outline-danger");
+                reportBtn.innerText = "Un-report";
+            } else {
+                reportBtn.classList.remove("text-danger");
+                reportBtn.innerText = "Report";
+            }
+        }
+
+        // ✅ For superuser, dynamically update reported message list
+        if (IS_OWNER) {
+            const reportedList = document.getElementById("reported-messages");
+
+            // Remove "Nothing reported yet 🎉" placeholder
+            const placeholder = document.getElementById("no-reports");
+            if (placeholder) placeholder.remove();
+
+            if (isReported) {
+                // Only add if not already added
+                if (!document.getElementById(`reported-${msgId}`)) {
+                    const msgContent = document.querySelector(`#msg-${msgId} div:nth-child(2)`).textContent;
+                    const msgUsername = document.querySelector(`#msg-${msgId} strong`).textContent;
+
+                    const li = document.createElement("li");
+                    li.id = `reported-${msgId}`;
+                    li.className = "list-group-item d-flex justify-content-between align-items-center";
+                    li.innerHTML = `
+                        <span><strong>${msgUsername}</strong>: ${msgContent.slice(0, 100)}</span>
+                        <button onclick="deleteMessage(${msgId})" class="btn btn-sm btn-danger">Delete</button>
+                    `;
+                    reportedList.appendChild(li);
+                }
+            } else {
+                const existing = document.getElementById(`reported-${msgId}`);
+                if (existing) {
+                    existing.remove();
+
+                    // If none left, show placeholder again
+                    if (!document.querySelector("#reported-messages li[id^='reported-']")) {
+                        const li = document.createElement("li");
+                        li.id = "no-reports";
+                        li.className = "list-group-item";
+                        li.innerText = "Nothing reported yet 🎉";
+                        reportedList.appendChild(li);
+                    }
+                }
+            }
+        }
+
+        return;
+    }
+
+
+
+
+
+
+        if (!data.username || data.username === "undefined") return;
+
+        const div = document.createElement("div");
+        div.className = "mb-2 border p-2 rounded";
+        div.setAttribute("data-msg-id", data.id);
+        div.setAttribute("id", `msg-${data.id}`);
+
+
+        const pinned = data.pinned || false;
+
+
+        div.innerHTML = `
+          <div class="d-flex align-items-center mb-1">
+              <img src="${data.profile_pic}" class="rounded-circle me-2" width="40" height="40">
+              <strong>${data.username}</strong>
+              ${data.badge ? `<img src="${data.badge}" class="ms-2" style="height:20px;">` : ""}
+              <span class="text-muted ms-auto">${timeAgo(data.timestamp)}</span>
+
+
+          </div>
+          <div>${data.message}</div>
+          ${(username !== data.username && !IS_OWNER) ? `
+          <button onclick="toggleReport(${data.id})" class="btn btn-sm btn-outline-danger mt-1 report-btn">
+              ${data.reported ? "Un-report" : "Report"}
+          </button>` : ""}
+
+
+          ${IS_OWNER ? `
+              <button onclick="deleteMessage(${data.id})" class="btn btn-sm btn-outline-danger mt-1 ms-2">Delete</button>
+              <button onclick="pinMessage(${data.id}, false)" class="btn btn-sm btn-outline-primary mt-1 ms-2 pin-btn">Pin</button>
+          ` : ""}
+      `;
+        document.getElementById("chat-box").appendChild(div);
+
+        if (pinned) {
+            moveToPinnedArea(div, true);
+        } else {
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+
+
+
+    };
+
+    document.getElementById("chat-form").onsubmit = function (e) {
+        e.preventDefault();
+        if (chatSocket.readyState === WebSocket.OPEN) {
+            const msg = messageInput.value;
+            chatSocket.send(JSON.stringify({
+                'username': username,
+                'message': msg,
+                'profile_picture': profilePicture,
+                'badge': badge
+            }));
+            messageInput.value = '';
+        } else {
+            alert("WebSocket is not connected.");
+        }
+    };
+
+    window.onload = function () {
+        const chatBox = document.getElementById("chat-box");
+        chatBox.scrollTop = chatBox.scrollHeight;
+    };
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+    </body>
+</html>
+{% endblock %}
