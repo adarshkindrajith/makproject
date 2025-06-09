@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Staff Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Bootstrap 5 CDN (for example) -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+</head>
+<body class="bg-gray-100 text-gray-900">
+  {% if messages %}
+  <ul class="messages">
+    {% for message in messages %}
+      <li class="{{ message.tags }}">{{ message }}</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+
+  <!-- Student Management -->
+  <div class="max-w-7xl mx-auto py-10 px-4">
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <h2 class="text-xl font-bold">My Students ({{ students|length }})</h2>
+        <div class="mt-4 md:mt-0 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+          <select class="border rounded px-3 py-1 text-sm">
+            <option>Filter by Progress</option>
+            <option>On Track</option>
+            <option>Needs Help</option>
+            <option>Behind Schedule</option>
+          </select>
+          <select class="border rounded px-3 py-1 text-sm">
+            <option>Filter by Module</option>
+            <option>JavaScript Basics</option>
+            <option>React Fundamentals</option>
+            <option>Node.js</option>
+          </select>
+          <input type="text" placeholder="Search students..." class="border rounded px-3 py-1 text-sm">
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Module</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approve</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            {% for item in students %}
+            <tr class="hover:bg-gray-50">
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0 h-10 w-10">
+                    <img class="h-10 w-10 rounded-full" src="https://randomuser.me/api/portraits/men/{{ forloop.counter|add:20 }}.jpg" alt="">
+                  </div>
+                  <div class="ml-4">
+                    <div class="text-sm font-medium text-gray-900">{{ item.student.username }}</div>
+                    <div class="text-sm text-gray-500">Week {{ item.current_module_week }}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="text-sm text-gray-900">{{ item.current_module }}</div>
+                <div class="text-sm text-gray-500">Module details</div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                  <div class="bg-green-500 h-2 rounded-full" style="width: {{ item.progress }}%"></div>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">{{ item.completed }}/{{ item.total }} tasks</div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 py-1 text-xs rounded-full
+                  {% if item.status == 'On Track' %}bg-green-100 text-green-800
+                  {% elif item.status == 'Needs Help' %}bg-yellow-100 text-yellow-800
+                  {% else %}bg-red-100 text-red-800{% endif %}">
+                  {{ item.status }}
+                </span>
+              </td>
+             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <a href="{% url 'student_module_progress' item.student.id %}">
+                 <button class="btn btn-primary">View Profile</button>
+                </a>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <a href="{% url 'approve_next_week' item.student.id %}" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm font-semibold">Approve next week</a>
+
+                </td>
+
+              </td>
+
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="px-6 py-4 text-center text-gray-500">No students found.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Help Requests -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h2 class="text-2xl font-semibold mb-6 text-gray-800">Pending Help Requests</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for request in help_requests %}
+        <div class="bg-white rounded-lg shadow p-4 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-sm font-medium text-gray-500">Student</p>
+              <p class="text-lg font-semibold text-gray-900">{{ request.student.username }}</p>
+            </div>
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-sm font-medium text-gray-500">Type</p>
+              <p class="text-lg font-semibold text-gray-900">{{ request.get_request_type_display }}</p>
+            </div>
+            <div class="flex items-center justify-between mb-2 text-sm text-gray-500">
+              <p>Created At:</p>
+              <p>{{ request.created_at|date:"M d, Y H:i" }}</p>
+            </div>
+            {% if request.accepted_by %}
+            <div class="flex items-center justify-between text-sm text-green-700 font-semibold">
+              <p>Accepted By:</p>
+              <p>{{ request.accepted_by.username }}</p>
+            </div>
+            {% endif %}
+          </div>
+          <div class="mt-4">
+            {% if request.accepted_by %}
+            <a href="{% url 'mark_request_handled' request.id %}" 
+               class="inline-block bg-green-100 text-green-700 px-4 py-2 rounded hover:bg-green-200 transition">
+              ✅ Mark as Handled
+            </a>
+            {% else %}
+            <a href="{% url 'accept_help_request' request.id %}" 
+               class="inline-block bg-yellow-100 text-yellow-700 px-4 py-2 rounded hover:bg-yellow-200 transition">
+              ✋ Accept Request
+            </a>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <p class="text-gray-500 text-center col-span-full">No pending help requests.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,266 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Student Dashboard</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+
+    .progress-bar {
+      background: #ccc;
+      height: 10px;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+
+    .progress {
+      background: blueviolet;
+      height: 10px;
+      width: {{ progress }}%;
+      border-radius: 10px;
+    }
+
+    .task {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f4f4f4;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tick-btn {
+      padding: 5px 10px;
+      background: green;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .tick-btn.unmark {
+      background: gray;
+    }
+
+    .review-btn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: dodgerblue;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .logout {
+      text-align: right;
+      margin-bottom: 20px;
+    }
+
+    .logout a {
+      color: crimson;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    #review-section {
+      margin-top: 30px;
+      border-top: 2px solid #ddd;
+      padding-top: 20px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 60px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+
+    .help-buttons button {
+      margin: 5px 5px 0 0;
+      padding: 8px 14px;
+      background-color: #444;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+{% if user.is_authenticated %}
+  <div class="logout">
+    Welcome, {{ user.username }} |
+    <a href="{% url 'student_logout' %}">Logout</a>
+  </div>
+{% endif %}
+
+<h2>Current Module: {{ module.name }}</h2>
+<p>Week {{ module.week }}</p>
+
+<div class="progress-bar">
+  <div class="progress"></div>
+</div>
+<p>{{ completed }} / {{ total }} tasks completed</p>
+
+{% for item in task_statuses %}
+  <div class="task">
+    <span>{{ item.task.title }}</span>
+    <form action="{% url 'complete_task' item.task.id %}" method="post">
+      {% csrf_token %}
+      {% if item.is_completed %}
+        <button type="submit" class="tick-btn unmark">Unmark</button>
+      {% else %}
+        <button type="submit" class="tick-btn">Mark Complete</button>
+      {% endif %}
+    </form>
+  </div>
+{% endfor %}
+    <button onclick="sendHelpRequest('urgent_review')" class="w-full flex items-center justify-between px-3 py-2 bg-indigo-50 rounded-lg hover:bg-indigo-100">
+      <span class="text-sm font-medium">Schedule Urgent Review</span>
+      <i class="fas fa-calendar-plus text-indigo-600"></i>
+    </button>
+
+<!-- Review button -->
+{% if completed == total %}
+  <!-- Review button appears only if all tasks are complete -->
+  <button type="button" onclick="loadReviewPage()" class="review-btn">Submit Review</button>
+{% endif %}
+
+<!-- This will be filled by AJAX -->
+<div id="review-section"></div>
+
+<!-- Study Materials Section -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold mb-4 flex items-center">
+                        <i class="fas fa-book-open text-indigo-600 mr-2"></i>
+                        Study Materials
+                    </h2>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <!-- Current Module Materials -->
+                        <div class="border rounded-lg p-4">
+                            <h3 class="font-medium mb-3 text-indigo-700">{{ module.name }}</h3>
+                            <div class="space-y-2">
+                                <a href="#" class="flex items-center p-2 hover:bg-gray-50 rounded">
+                                    <i class="fas fa-file-pdf text-red-500 mr-3"></i>
+                                    <span>Variables and Scope Guide</span>
+                                </a>
+                                <a href="#" class="flex items-center p-2 hover:bg-gray-50 rounded">
+                                    <i class="fas fa-video text-blue-500 mr-3"></i>
+                                    <span>Functions Tutorial Video</span>
+                                </a>
+                                <a href="#" class="flex items-center p-2 hover:bg-gray-50 rounded">
+                                    <i class="fas fa-link text-green-500 mr-3"></i>
+                                    <span>Arrays Cheat Sheet</span>
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <!-- Additional Resources -->
+                        <div class="border rounded-lg p-4">
+                            <h3 class="font-medium mb-3 text-indigo-700">Additional Resources</h3>
+                            <div class="space-y-2">
+                                <a href="#" class="flex items-center p-2 hover:bg-gray-50 rounded">
+                                    <i class="fas fa-globe text-purple-500 mr-3"></i>
+                                    <span>JavaScript Documentation</span>
+                                </a>
+                                <a href="#" class="flex items-center p-2 hover:bg-gray-50 rounded">
+                                    <i class="fas fa-laptop-code text-yellow-500 mr-3"></i>
+                                    <span>Interactive Code Exercises</span>
+                                </a>
+                                <a href="#" class="flex items-center p-2 hover:bg-gray-50 rounded">
+                                    <i class="fas fa-question-circle text-gray-500 mr-3"></i>
+                                    <span>FAQ for Current Module</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <h3>🏅 Earned Badges</h3>
+{% if student_badges %}
+  <ul>
+    {% for student_badge in student_badges %}
+      <li>{{ student_badge.badge.name }} - Awarded for {{ student_badge.badge.module.name }}</li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>No badges earned yet.</p>
+{% endif %}
+
+  
+<script>
+  function loadReviewPage() {
+    fetch("{% url 'review_dashboard' %}")
+      .then(response => {
+        if (!response.ok) throw new Error("Failed to load review section.");
+        return response.text();
+      })
+      .then(html => {
+        document.getElementById("review-section").innerHTML = html;
+        window.scrollTo({
+          top: document.getElementById("review-section").offsetTop,
+          behavior: "smooth"
+        });
+      })
+      .catch(error => {
+        console.error("Error loading review:", error);
+        alert("Could not load the review section.");
+      });
+  }
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (const cookie of cookies) {
+        const c = cookie.trim();
+        if (c.startsWith(name + '=')) {
+          cookieValue = decodeURIComponent(c.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  function sendHelpRequest(type) {
+    const message = document.getElementById('helpMessage').value;
+    const csrftoken = getCookie('csrftoken');
+
+    fetch('{% url "submit_help" %}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRFToken': csrftoken
+      },
+      body: `type=${type}&message=${encodeURIComponent(message)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+      alert(data.message);
+      if (data.status === 'success') {
+        document.getElementById('helpMessage').value = '';
+      }
+    })
+    .catch(error => {
+      console.error("Error submitting help request:", error);
+      alert("Something went wrong.");
+    });
+  }
+</script>
+
+{% block content%}
+
+{% endblock content%}
+
+</body>
+</html>

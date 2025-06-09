@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Student Module Progress</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen py-10 px-6">
+    <div class="max-w-3xl mx-auto bg-white shadow-lg rounded-xl p-6">
+        <h2 class="text-2xl font-bold mb-6 text-center text-indigo-700">
+            Module Progress for Student #{{ progress.student_id }}
+        </h2>
+
+        <table class="min-w-full table-auto border border-gray-200 rounded">
+            <thead class="bg-indigo-100 text-indigo-800">
+                <tr>
+                    <th class="px-4 py-2 text-left">Module Name</th>
+                    <th class="px-4 py-2 text-left">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for module in progress.modules %}
+                <tr class="border-b border-gray-200">
+                    <td class="px-4 py-2">{{ module.name }}</td>
+                    <td class="px-4 py-2">
+                        {% if module.status == "Completed" %}
+                            <span class="text-green-600 font-semibold">{{ module.status }}</span>
+                        {% elif module.status == "In Progress" %}
+                            <span class="text-yellow-600 font-semibold">{{ module.status }}</span>
+                        {% else %}
+                            <span class="text-gray-500 italic">{{ module.status }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="2" class="text-center text-gray-500 py-4">No modules found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="mt-6 text-center">
+            <a href="{% url 'staff_dashboard' %}" class="text-indigo-600 hover:underline">
+                ← Back to Staff Dashboard
+            </a>
+        </div>
+    </div>
+</body>
+</html>

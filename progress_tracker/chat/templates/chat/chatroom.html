@@ -1,0 +1,665 @@
+{% extends 'learning/student_dashboard.html' %}
+{% load static %}
+{% load humanize %}
+{% block content %}
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    makblue: '#2563EB',
+                    makgreen: '#10B981',
+                    makred: '#EF4444',
+                    makyellow: '#F59E0B',
+                    makgray: '#F3F4F6',
+                }
+            }
+        }
+    }
+</script>
+<div class="flex h-screen overflow-hidden">
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <header class="bg-white border-b border-gray-200 p-1 flex items-center justify-between">
+            <div>
+                <h1 class="text-xl font-bold text-makblue">makBig Admin Panel</h1>
+                <p class="text-xs text-gray-500">Chat control section</p>
+            </div>
+            <h2 class="text-lg font-bold text-gray-800">Group Chat</h2>
+            <div class="flex space-x-2">
+                <button class="p-2 text-gray-500 hover:text-makblue hover:bg-gray-100 rounded-full">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="p-2 text-gray-500 hover:text-makblue hover:bg-gray-100 rounded-full">
+                    <i class="fas fa-filter"></i>
+                </button>
+            </div>
+        </header>
+
+        <main id="main-chat-container" class="flex-1 overflow-y-auto bg-makgray relative"> {# Added ID here #}
+            <div class="bg-white rounded-lg shadow-md mb-4 sticky top-0 z-10">
+                <div class="p-2 border-b border-gray-200 flex items-center justify-between">
+                    <h3 class="text-md font-semibold text-gray-800"><i class="fas fa-thumbtack mr-2 text-makblue"></i>Pinned Messages</h3>
+                </div>
+                <div id="pinned-zone" class="p-2 space-y-1">
+                    {% for msg in messages %}
+                        {% if msg.pinned %}
+                            <div class="flex items-start message-item border-b border-gray-100 pb-1 last:border-b-0" data-msg-id="{{ msg.id }}" id="msg-{{ msg.id }}">
+                                <img src="{% if msg.user.profile_picture %}{{ msg.user.profile_picture.url }}{% else %}{% static 'profile_pics/wallpaper.jpg' %}{% endif %}" alt="User" class="w-10 h-10 rounded-full mr-2 mt-1">
+                                <div class="flex-1">
+                                    <div class="flex items-center">
+                                        <span class="font-bold text-md mr-2">{{ msg.user.username }}</span>
+                                        {% if msg.user.badge and not msg.user.is_superuser %}
+                                            <img src="{{ msg.user.badge.url }}" alt="Badge" class="w-4 h-4 rounded-full mr-1">
+                                        {% endif %}
+                                        <span class="text-xs text-gray-500 ml-auto">{{ msg.timestamp|timesince }} ago</span>
+                                    </div>
+                                    {% if msg.replied_to %}
+                                        <div class="bg-gray-100 p-2 rounded-md border-l-4 border-makblue mb-2 reply-info">
+                                            <p class="text-sm text-gray-600">Replying to <span class="font-semibold">{{ msg.replied_to.user.username }}</span>:</p>
+                                            <p class="text-sm italic text-gray-700">{{ msg.replied_to.content|truncatechars:50 }}</p>
+                                        </div>
+                                    {% endif %}
+                                    <p class="mt-0.5 text-base font-bold text-red-700 message-content-p {% if msg.reported and user.is_superuser %}text-makred{% endif %}">{{ msg.content }}</p>
+                                    <div class="flex justify-end mt-1">
+                                        {% if request.user.is_superuser %}
+                                            <button onclick="deleteMessage({{ msg.id }})" class="px-2 py-2 bg-makred text-white text-xs rounded hover:bg-red-600">
+                                                <i class="fas fa-trash-alt mr-1"></i>
+                                            </button>
+                                            <button onclick="pinMessage({{ msg.id }})" class="px-2 py-2 mx-1 bg-makgreen text-white text-xs rounded hover:bg-green-600 pin-btn">
+                                                <i class="fas fa-thumbtack mr-1"></i> Un-pin
+                                            </button>
+                                        {% endif %}
+                                        {% if not request.user.is_superuser and request.user.username != msg.user.username and not msg.user.is_superuser %}
+                                        <button
+                                            id="report-btn-{{ msg.id }}"
+                                            onclick="toggleReport({{ msg.id }})"
+                                            class="px-2 py-2 text-white text-xs rounded report-btn {% if msg.reported %}bg-makred hover:bg-red-600{% else %}bg-makyellow hover:bg-yellow-600{% endif %}"
+                                            style="display: none;"
+                                        >
+                                            <i class="fas fa-flag mr-1"></i> {% if msg.reported %}Un-report{% else %}Report{% endif %}
+                                        </button>
+                                        {% endif %} {# This was missing! #}
+                                        <button onclick="replyToMessage({{ msg.id }}, '{{ msg.user.username|escapejs }}', '{{ msg.content|escapejs }}')" class="px-2 py-2 bg-makblue text-white text-xs rounded hover:bg-blue-600 ml-1">
+                                            <i class="fas fa-reply mr-1"></i> Reply
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div id="chat-box" class="space-y-3 p-3">
+                {% for msg in messages %}
+                    {% if not msg.pinned %}
+                        <div class="bg-white rounded-lg shadow-sm overflow-hidden message-item" data-msg-id="{{ msg.id }}" id="msg-{{ msg.id }}">
+                            <div class="p-3">
+                                <div class="flex items-start">
+                                    <img src="{% if msg.user.profile_picture %}{{ msg.user.profile_picture.url }}{% else %}{% static 'profile_pics/wallpaper.jpg' %}{% endif %}" alt="User" class="w-10 h-10 rounded-full mr-2 mt-1">
+                                    <div class="flex-1">
+                                        <div class="flex items-center">
+                                            <span class="font-bold text-md mr-2">{{ msg.user.username }}</span>
+                                            {% if msg.user.badge and not msg.user.is_superuser %}
+                                                <img src="{{ msg.user.badge.url }}" alt="Badge" class="w-8 h-8 rounded-full mr-1">
+                                            {% endif %}
+                                            <span class="text-md text-gray-500 ml-auto">{{ msg.timestamp|timesince }} ago</span>
+                                        </div>
+                                        {% if msg.replied_to %}
+                                            <div class="bg-gray-100 p-2 rounded-md border-l-4 border-makblue mb-2 reply-info">
+                                                <p class="text-sm text-gray-600">Replying to <span class="font-semibold">{{ msg.replied_to.user.username }}</span>:</p>
+                                                <p class="text-sm italic text-gray-700">{{ msg.replied_to.content|truncatechars:50 }}</p>
+                                            </div>
+                                        {% endif %}
+                                        <p class="mt-0.5 text-base text-gray-700 message-content-p {% if msg.reported and user.is_superuser %}text-makred{% endif %}">{{ msg.content }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-gray-50 px-3 py-2 flex justify-end space-x-1">
+                                {% if not request.user.is_superuser and request.user.username != msg.user.username and not msg.user.is_superuser %}
+                                <button
+                                    id="report-btn-{{ msg.id }}"
+                                    onclick="toggleReport({{ msg.id }})"
+                                    class="px-2 py-2 text-white text-xs rounded report-btn {% if msg.reported %}bg-makred hover:bg-red-600{% else %}bg-makyellow hover:bg-yellow-600{% endif %}"
+                                >
+                                    <i class="fas fa-flag mr-1"></i> {% if msg.reported %}Un-report{% else %}Report{% endif %}
+                                </button>
+                                {% endif %} {# This was missing! #}
+                                {% if request.user.is_superuser %}
+                                <button onclick="deleteMessage({{ msg.id }})" class="px-2 py-2 bg-makred text-white text-xs rounded hover:bg-red-600">
+                                    <i class="fas fa-trash-alt mr-1"></i>
+                                </button>
+                                <button onclick="pinMessage({{ msg.id }})" class="px-2 py-2 bg-makgreen text-white text-xs rounded hover:bg-green-600 pin-btn">
+                                    <i class="fas fa-thumbtack mr-1"></i> Pin
+                                </button>
+                                {% endif %}
+                                <button onclick="replyToMessage({{ msg.id }}, '{{ msg.user.username|escapejs }}', '{{ msg.content|escapejs }}')" class="px-2 py-2 bg-makblue text-white text-xs rounded hover:bg-blue-600">
+                                    <i class="fas fa-reply mr-1"></i> Reply
+                                </button>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </main>
+
+        <div class="bg-white border-t border-gray-100 p-4">
+            <div id="reply-preview" class="hidden bg-gray-100 p-2 rounded-md mb-2 flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-600">Replying to <span id="reply-username" class="font-semibold"></span>:</p>
+                    <p id="reply-content" class="text-sm italic text-gray-700"></p>
+                </div>
+                <button onclick="cancelReply()" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="chat-form" class="flex items-center space-x-1">
+                <input id="message-input" type="text" placeholder="Type a message..." class="flex-1 p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-makblue" required />
+                <button type="submit" class="px-5 py-3 bg-makblue text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-makblue">
+                    <i class="fas fa-paper-plane mr-2"></i>Send
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% if request.user.is_superuser %}
+    <aside class="w-80 bg-white border-l border-gray-200 flex flex-col p-4 shadow-lg overflow-y-auto">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Reported Message Summary</h3>
+        <ul id="reported-messages" class="space-y-3">
+            {% for msg in reported_msgs %}
+                <li id="reported-{{ msg.id }}" class="bg-gray-50 rounded-lg p-3 shadow-sm">
+                    <div class="flex items-start mb-2">
+                        <img src="{% if msg.user.profile_picture %}{{ msg.user.profile_picture.url }}{% else %}{% static 'profile_pics/wallpaper.jpg' %}{% endif %}" alt="Reported User" class="w-10 h-10 rounded-full mr-2">
+                        <div class="flex-1">
+                            <div class="font-semibold text-sm text-gray-800">{{ msg.user.username }}</div>
+                            <span class="text-xs text-gray-500">{{ msg.timestamp|timesince }} ago</span>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-700 mb-3">{{ msg.content|truncatewords:10 }}</p>
+                    <button onclick="deleteMessage({{ msg.id }})" class="w-full px-2 py-1 bg-makred text-white text-sm rounded hover:bg-red-600">
+                        <i class="fas fa-trash-alt mr-1"></i> Delete Message
+                    </button>
+                </li>
+            {% empty %}
+                <li id="no-reports" class="bg-gray-50 rounded-lg p-3 text-center text-gray-600">Nothing reported yet 🎉</li>
+            {% endfor %}
+        </ul>
+    </aside>
+    {% endif %}
+</div>
+
+<script>
+    const username = "{{ user.username|escapejs }}";
+    const profilePicture = "{% if user.profile_picture %}{{ user.profile_picture.url }}{% else %}{% static 'profile_pics/wallpaper.jpg' %}{% endif %}";
+    const badge = "{% if user.badge %}{{ user.badge.url }}{% endif %}";
+    const IS_OWNER = {{ request.user.is_superuser|yesno:"true,false" }};
+
+    const chatBox = document.getElementById("chat-box");
+    const messageInput = document.getElementById("message-input");
+    const pinnedZone = document.getElementById("pinned-zone");
+    const reportedMessagesList = document.getElementById("reported-messages");
+    const replyPreview = document.getElementById("reply-preview");
+    const replyUsername = document.getElementById("reply-username");
+    const replyContent = document.getElementById("reply-content");
+    // New: Get the main chat container for scrolling
+    const mainChatContainer = document.getElementById("main-chat-container"); 
+
+    let replyingToMessageId = null;
+
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    const chatSocket = new WebSocket(`${protocol}://${location.host}/ws/chat/`);
+
+    function deleteMessage(id) {
+        chatSocket.send(JSON.stringify({
+            type: "delete",
+            id: id
+        }));
+    }
+
+    function toggleReport(id) {
+        const reportBtn = document.getElementById(`report-btn-${id}`);
+        const isCurrentlyReported = reportBtn && reportBtn.textContent.trim().toLowerCase().includes("un-report");
+        chatSocket.send(JSON.stringify({
+            type: "report",
+            id: id,
+            value: !isCurrentlyReported
+        }));
+    }
+
+    function pinMessage(id) {
+        const msgDiv = document.getElementById(`msg-${id}`);
+        const btn = msgDiv ? msgDiv.querySelector(".pin-btn") : null;
+        
+        const currentlyPinned = btn && btn.textContent.trim().toLowerCase().includes("un-pin");
+
+        chatSocket.send(JSON.stringify({
+            type: "pin",
+            id: id,
+            value: !currentlyPinned
+        }));
+    }
+
+    function replyToMessage(messageId, userName, messageContent) {
+        replyingToMessageId = messageId;
+        replyUsername.textContent = userName;
+        replyContent.textContent = messageContent;
+        replyPreview.classList.remove("hidden");
+        messageInput.focus();
+        // Scroll the main chat container
+        mainChatContainer.scrollTop = mainChatContainer.scrollHeight; 
+    }
+
+    function cancelReply() {
+        replyingToMessageId = null;
+        replyUsername.textContent = "";
+        replyContent.textContent = "";
+        replyPreview.classList.add("hidden");
+    }
+
+    // This function is now redundant as messages are handled directly in onmessage
+    // function addMessageToChatBox(messageHtml) {
+    //     const div = document.createElement("div");
+    //     div.innerHTML = messageHtml;
+    //     chatBox.appendChild(div); 
+    //     mainChatContainer.scrollTop = mainChatContainer.scrollHeight; // Scroll the main container
+    // }
+
+    function moveToPinnedArea(div, makePinned) {
+        // Extract existing content for re-creation
+        const originalUserImgSrc = div.querySelector('img').src;
+        const originalUsername = div.querySelector('.font-bold').textContent;
+        const originalBadge = div.querySelector('.w-4.h-4') ? div.querySelector('.w-4.h-4').outerHTML : '';
+        const originalTimestamp = div.querySelector('.text-xs.text-gray-500, .text-md.text-gray-500').textContent;
+        
+        const originalMessageContent = div.querySelector('.message-content-p').textContent; 
+        const isOriginalMessageReported = div.querySelector('.message-content-p').classList.contains('text-makred');
+
+        const replyInfoDiv = div.querySelector('.reply-info'); 
+        const replyHtml = replyInfoDiv ? replyInfoDiv.outerHTML : ''; 
+
+        const replyButtonHtml = `
+            <button onclick="replyToMessage(${div.getAttribute("data-msg-id")}, '${originalUsername.replace(/'/g, "\\'")}', '${originalMessageContent.replace(/'/g, "\\'")}')" class="px-2 py-0.5 bg-makblue text-white text-xs rounded hover:bg-blue-600 ml-1">
+                <i class="fas fa-reply mr-1"></i> Reply
+            </button>
+        `;
+
+        // Remove the original div from wherever it currently is
+        if (chatBox.contains(div)) {
+            chatBox.removeChild(div);
+        } else if (pinnedZone.contains(div)) {
+            pinnedZone.removeChild(div);
+        }
+
+        const newDiv = document.createElement('div');
+        newDiv.setAttribute("data-msg-id", div.getAttribute("data-msg-id"));
+        newDiv.setAttribute("id", div.id);
+
+        if (makePinned) {
+            newDiv.className = "flex items-start message-item border-b border-gray-100 pb-1 last:border-b-0";
+            newDiv.innerHTML = `
+                <img src="${originalUserImgSrc}" alt="User" class="w-10 h-10 rounded-full mr-2 mt-1">
+                <div class="flex-1">
+                    <div class="flex items-center">
+                        <span class="font-bold text-md mr-2">${originalUsername}</span>
+                        ${originalBadge}
+                        <span class="text-md text-gray-500 ml-auto">${originalTimestamp}</span>
+                    </div>
+                    ${replyHtml}
+                    <p class="mt-0.5 text-base font-bold text-red-700 message-content-p ${isOriginalMessageReported ? 'text-makred' : ''}">${originalMessageContent}</p>
+                    <div class="flex justify-end mt-1">
+                        ${IS_OWNER ? `
+                            <button onclick="deleteMessage(${div.getAttribute("data-msg-id")})" class="px-2 py-2 bg-makred text-white text-xs rounded hover:bg-red-600">
+                                <i class="fas fa-trash-alt mr-1"></i>
+                            </button>
+                            <button onclick="pinMessage(${div.getAttribute("data-msg-id")})" class="px-2 py-2 mx-1 bg-makgreen text-white text-xs rounded hover:bg-green-600 pin-btn">
+                                <i class="fas fa-thumbtack mr-1"></i> Un-pin
+                            </button>
+                        ` : ''}
+                        {% if not request.user.is_superuser %} {# Add this condition if report button should only show for non-superusers #}
+                        <button
+                            id="report-btn-${div.getAttribute("data-msg-id")}"
+                            onclick="toggleReport(${div.getAttribute("data-msg-id")})"
+                            class="px-2 py-2 text-white text-xs rounded report-btn ${div.querySelector('.report-btn') && div.querySelector('.report-btn').classList.contains('bg-makred') ? 'bg-makred hover:bg-red-600' : 'bg-makyellow hover:bg-yellow-600'}"
+                            style="display: none;"
+                        >
+                            <i class="fas fa-flag mr-1"></i> ${div.querySelector('.report-btn') && div.querySelector('.report-btn').textContent.includes('Un-report') ? 'Un-report' : 'Report'}
+                        </button>
+                        {% endif %} {# Closing if tag #}
+                        ${replyButtonHtml}
+                    </div>
+                </div>
+            `;
+            pinnedZone.appendChild(newDiv);
+            const reportBtn = newDiv.querySelector(".report-btn");
+            if (reportBtn) reportBtn.style.display = "none"; 
+        } else {
+            newDiv.className = "bg-white rounded-lg shadow-sm overflow-hidden message-item";
+            newDiv.innerHTML = `
+                <div class="p-3">
+                    <div class="flex items-start">
+                        <img src="${originalUserImgSrc}" alt="User" class="w-10 h-10 rounded-full mr-2 mt-1">
+                        <div class="flex-1">
+                            <div class="flex items-center">
+                                <span class="font-bold text-md mr-2">${originalUsername}</span>
+                                ${originalBadge}
+                                <span class="text-md text-gray-500 ml-auto">${originalTimestamp}</span>
+                            </div>
+                            ${replyHtml}
+                            <p class="mt-0.5 text-base text-gray-700 message-content-p ${isOriginalMessageReported ? 'text-makred' : ''}">${originalMessageContent}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-3 py-2 flex justify-end space-x-1">
+                    {% if not request.user.is_superuser %} {# Add this condition if report button should only show for non-superusers #}
+                    <button
+                        id="report-btn-${div.getAttribute("data-msg-id")}"
+                        onclick="toggleReport(${div.getAttribute("data-msg-id")})"
+                        class="px-2 py-2 text-white text-xs rounded report-btn ${div.querySelector('.report-btn') && div.querySelector('.report-btn').classList.contains('bg-makred') ? 'bg-makred hover:bg-red-600' : 'bg-makyellow hover:bg-yellow-600'}"
+                    >
+                        <i class="fas fa-flag mr-1"></i> ${div.querySelector('.report-btn') && div.querySelector('.report-btn').textContent.includes('Un-report') ? 'Un-report' : 'Report'}
+                    </button>
+                    {% endif %} {# Closing if tag #}
+                    ${IS_OWNER ? `
+                        <button onclick="deleteMessage(${div.getAttribute("data-msg-id")})" class="px-2 py-2 bg-makred text-white text-xs rounded hover:bg-red-600">
+                            <i class="fas fa-trash-alt mr-1"></i>
+                        </button>
+                        <button onclick="pinMessage(${div.getAttribute("data-msg-id")})" class="px-2 py-2 bg-makgreen text-white text-xs rounded hover:bg-green-600 pin-btn">
+                            <i class="fas fa-thumbtack mr-1"></i> Pin
+                        </button>
+                    ` : ''}
+                    ${replyButtonHtml}
+                </div>
+            `;
+            chatBox.appendChild(newDiv);
+            mainChatContainer.scrollTop = mainChatContainer.scrollHeight; // Scroll the main container
+            const reportBtn = newDiv.querySelector(".report-btn");
+            if (reportBtn) {
+                   const isMyOwnMessage = (username === originalUsername);
+                   const isSuperuserSending = (IS_OWNER); 
+                   if (!isMyOwnMessage && !isSuperuserSending) { 
+                       reportBtn.style.display = "";
+                   } else {
+                       reportBtn.style.display = "none"; 
+                   }
+            }
+        }
+    }
+
+
+    function timeAgo(date) {
+        const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+        const intervals = {
+            year: 31536000,
+            month: 2592000,
+            week: 604800,
+            day: 86400,
+            hour: 3600,
+            minute: 60,
+            second: 1
+        };
+
+        for (const [unit, value] of Object.entries(intervals)) {
+            const amount = Math.floor(seconds / value);
+            if (amount >= 1) {
+                return `${amount} ${unit}${amount > 1 ? 's' : ''} ago`;
+            }
+        }
+        return 'just now';
+    }
+
+    const deletedMessages = new Set();
+
+    chatSocket.onmessage = e => {
+        const data = JSON.parse(e.data);
+
+        if (data.action === "pin") {
+            const msgDiv = document.getElementById(`msg-${data.id}`);
+            if (msgDiv) {
+                moveToPinnedArea(msgDiv, data.value);
+            }
+            // No auto-scroll here, as pinning moves messages around
+            return;
+        }
+
+        if (data.action === "delete") {
+            const msgId = data.id;
+            if (deletedMessages.has(msgId)) return;
+            deletedMessages.add(msgId);
+
+            const msgElement = document.getElementById(`msg-${msgId}`);
+            if (msgElement) msgElement.remove();
+
+            const reportedItem = document.getElementById(`reported-${msgId}`);
+            if (reportedItem) {
+                reportedItem.remove();
+                if (IS_OWNER) {
+                    if (!reportedMessagesList.querySelector("li[id^='reported-']")) {
+                        const li = document.createElement("li");
+                        li.id = "no-reports";
+                        li.className = "bg-gray-50 rounded-lg p-3 text-center text-gray-600";
+                        li.innerText = "Nothing reported yet 🎉";
+                        reportedMessagesList.appendChild(li);
+                    }
+                }
+            }
+            // No auto-scroll here, as messages are being removed
+            return;
+        }
+
+        if (data.action === "report") {
+            const msgId = data.id;  
+            const isReported = data.reported;
+
+            const msgElement = document.getElementById(`msg-${msgId}`);
+            if (msgElement) {
+                const reportBtn = msgElement.querySelector(".report-btn");
+                if (reportBtn) {
+                    if (isReported) {
+                        reportBtn.classList.remove("bg-makyellow", "hover:bg-yellow-600");
+                        reportBtn.classList.add("bg-makred", "hover:bg-red-600");
+                        reportBtn.innerHTML = `<i class="fas fa-flag mr-1"></i> Un-report`;
+                        if (IS_OWNER) {
+                           const contentP = msgElement.querySelector('.message-content-p');
+                           if (contentP) contentP.classList.add('text-makred');
+                        }
+                    } else {
+                        reportBtn.classList.remove("bg-makred", "hover:bg-red-600");
+                        reportBtn.classList.add("bg-makyellow", "hover:bg-yellow-600");
+                        reportBtn.innerHTML = `<i class="fas fa-flag mr-1"></i> Report`;
+                        if (IS_OWNER) {
+                           const contentP = msgElement.querySelector('.message-content-p');
+                           if (contentP) contentP.classList.remove('text-makred');
+                        }
+                    }
+                }
+            }
+
+            if (IS_OWNER) {
+                const placeholder = document.getElementById("no-reports");
+                if (placeholder) placeholder.remove();
+
+                if (isReported) {
+                    if (!document.getElementById(`reported-${msgId}`)) {
+                        const msgContentElement = msgElement ? msgElement.querySelector('.message-content-p') : null;
+                        const msgContent = msgContentElement ? msgContentElement.textContent : data.message;
+
+                        const msgUsernameElement = msgElement ? msgElement.querySelector('span.font-bold') : null;
+                        const msgUsername = msgUsernameElement ? msgUsernameElement.textContent : data.username;
+
+                        const userProfilePicElement = msgElement ? msgElement.querySelector('img') : null;
+                        const userProfilePic = userProfilePicElement ? userProfilePicElement.src : data.profile_pic;
+
+                        const timestampElement = msgElement ? msgElement.querySelector('.text-xs, .text-md') : null;
+                        const timestamp = timestampElement ? timestampElement.textContent : timeAgo(new Date());
+
+
+                        const li = document.createElement("li");
+                        li.id = `reported-${msgId}`;
+                        li.className = "bg-gray-50 rounded-lg p-3 shadow-sm";
+                        li.innerHTML = `
+                            <div class="flex items-start mb-2">
+                                <img src="${userProfilePic}" alt="Reported User" class="w-10 h-10 rounded-full mr-2">
+                                <div class="flex-1">
+                                    <div class="font-semibold text-sm text-gray-800">${msgUsername}</div>
+                                    <span class="text-md text-gray-500">${timestamp}</span>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-700 mb-3">${msgContent.slice(0, 100)}</p>
+                            <button onclick="deleteMessage(${msgId})" class="w-full px-2 py-1 bg-makred text-white text-sm rounded hover:bg-red-600">
+                                <i class="fas fa-trash-alt mr-1"></i> Delete Message
+                            </button>
+                        `;
+                        reportedMessagesList.appendChild(li);
+                    }
+                } else {
+                    const existing = document.getElementById(`reported-${msgId}`);
+                    if (existing) {
+                        existing.remove();
+                        if (!reportedMessagesList.querySelector("li[id^='reported-']")) {
+                            const li = document.createElement("li");
+                            li.id = "no-reports";
+                            li.className = "bg-gray-50 rounded-lg p-3 text-center text-gray-600";
+                            li.innerText = "Nothing reported yet 🎉";
+                            reportedMessagesList.appendChild(li);
+                        }
+                    }
+                }
+            }
+            // No auto-scroll here, as reporting doesn't add new messages
+            return;
+        }
+
+        if (!data.username || data.username === "undefined") return;
+
+        const div = document.createElement("div");
+        div.className = "bg-white rounded-lg shadow-sm overflow-hidden message-item";
+        div.setAttribute("data-msg-id", data.id);
+        div.setAttribute("id", `msg-${data.id}`);
+
+        const pinned = data.pinned || false;
+        const isReported = data.reported || false;
+
+        let replyHtml = '';
+        if (data.replied_to) {
+            replyHtml = `
+                <div class="bg-gray-100 p-2 rounded-md border-l-4 border-makblue mb-2 reply-info">
+                    <p class="text-sm text-gray-600">Replying to <span class="font-semibold">${data.replied_to.username}</span>:</p>
+                    <p class="text-sm italic text-gray-700">${data.replied_to.content.slice(0, 50)}</p>
+                </div>
+            `;
+        }
+
+        div.innerHTML = `
+            <div class="p-3">
+                <div class="flex items-start">
+                    <img src="${data.profile_pic}" alt="User" class="w-10 h-10 rounded-full mr-2 mt-1">
+                    <div class="flex-1">
+                        <div class="flex items-center">
+                            <span class="font-bold text-md mr-2">${data.username}</span>
+                            ${data.badge ? `<img src="${data.badge}" alt="Badge" class="w-4 h-4 rounded-full mr-1">` : ""}
+                            <span class="text-md text-gray-500 ml-auto">${timeAgo(data.timestamp)}</span>
+                        </div>
+                        ${replyHtml}
+                        <p class="mt-0.5 text-base text-gray-700 message-content-p ${isReported && IS_OWNER ? 'text-makred' : ''}">${data.message}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-3 py-1 flex justify-end space-x-1">
+                ${(username !== data.username && !IS_OWNER && !(data.is_sender_superuser)) ? `
+                <button id="report-btn-${data.id}" onclick="toggleReport(${data.id})" class="px-2 py-2 text-white text-xs rounded report-btn ${isReported ? 'bg-makred hover:bg-red-600' : 'bg-makyellow hover:bg-yellow-600'}" ${pinned ? 'style="display: none;"' : ''}>
+                    <i class="fas fa-flag mr-1"></i> ${isReported ? "Un-report" : "Report"}
+                </button>` : ""}
+                ${IS_OWNER ? `
+                    <button onclick="deleteMessage(${data.id})" class="px-2 py-2 bg-makred text-white text-xs rounded hover:bg-red-600">
+                        <i class="fas fa-trash-alt mr-1"></i>
+                    </button>
+                    <button onclick="pinMessage(${data.id})" class="px-2 py-2 bg-makgreen text-white text-xs rounded hover:bg-green-600 pin-btn">
+                        <i class="fas fa-thumbtack mr-1"></i> ${pinned ? "Un-pin" : "Pin"}
+                    </button>
+                ` : ""}
+                <button onclick="replyToMessage(${data.id}, '${data.username.replace(/'/g, "\\'")}', '${data.message.replace(/'/g, "\\'")}')" class="px-2 py-2 bg-makblue text-white text-xs rounded hover:bg-blue-600">
+                    <i class="fas fa-reply mr-1"></i> Reply
+                </button>
+            </div>
+        `;
+
+        if (pinned) {
+            moveToPinnedArea(div, true);
+        } else {
+            chatBox.appendChild(div);
+            // Crucial: Scroll the main chat container after appending a new message
+            mainChatContainer.scrollTop = mainChatContainer.scrollHeight; 
+        }
+
+        if (isReported && IS_OWNER) {
+            const placeholder = document.getElementById("no-reports");
+            if (placeholder) placeholder.remove();
+
+            const li = document.createElement("li");
+            li.id = `reported-${data.id}`;
+            li.className = "bg-gray-50 rounded-lg p-3 shadow-sm";
+            li.innerHTML = `
+                <div class="flex items-start mb-2">
+                    <img src="${data.profile_pic}" alt="Reported User" class="w-10 h-10 rounded-full mr-2">
+                    <div class="flex-1">
+                        <div class="font-semibold text-sm text-gray-800">${data.username}</div>
+                        <span class="text-md text-gray-500">${timeAgo(data.timestamp)}</span>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-700 mb-3">${data.message.slice(0, 100)}</p>
+                <button onclick="deleteMessage(${data.id})" class="w-full px-2 py-1 bg-makred text-white text-sm rounded hover:bg-red-600">
+                    <i class="fas fa-trash-alt mr-1"></i> Delete Message
+                </button>
+            `;
+            reportedMessagesList.appendChild(li);
+        }
+    };
+
+    document.getElementById("chat-form").onsubmit = function (e) {
+        e.preventDefault();
+        if (chatSocket.readyState === WebSocket.OPEN) {
+            const msg = messageInput.value;
+            if (!msg.trim()) { // Prevent sending empty messages
+                return; 
+            }
+            chatSocket.send(JSON.stringify({
+                'username': username,
+                'message': msg,
+                'profile_picture': profilePicture,
+                'badge': badge,
+                'replied_to': replyingToMessageId
+            }));
+            messageInput.value = '';
+            cancelReply();
+        } else {
+            alert("WebSocket is not connected.");
+        }
+    };
+
+    // Use DOMContentLoaded for initial scroll, and remove the duplicate window.onload
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initial scroll to bottom when the page loads
+        mainChatContainer.scrollTop = mainChatContainer.scrollHeight;
+
+        if (!IS_OWNER) {
+            document.querySelectorAll('.message-item').forEach(msgDiv => {
+                const reportBtn = msgDiv.querySelector('.report-btn');
+                if (reportBtn) {
+                    const msgUsername = msgDiv.querySelector('.font-bold').textContent.trim();
+                    const isMessagePinned = msgDiv.closest('#pinned-zone') !== null;
+
+                    if (username !== msgUsername && !isMessagePinned) {
+                        reportBtn.style.display = '';
+                    } else {
+                        reportBtn.style.display = 'none';
+                    }
+                }
+            });
+        }
+    });
+
+</script>
+{% endblock %}
